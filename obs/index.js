@@ -1,14 +1,17 @@
 
 let socket = io();
 let server ;
+
 let action_text ;
 let action_first_name;
 let action_command;
 let action_second_name;
 let action_canvas ;
 let canvas;
+
 let images = {};
 let isAnimationRunning = false;
+let commandQueue = new Array();
 // TODO config
 let delay = 500;
 
@@ -18,32 +21,41 @@ socket.on("connection", function(server_socket){
 
 });
 
-// TODO queue commands
 socket.on("pat", function(data){
 
     if(!isAnimationRunning){
-        isAnimationRunning = true;
-        showText(data.user, "pats", data.patted);
-        startPat();
+        startPat(data);
+    }else{
+        commandQueue.push({
+            type : "pat",
+            data : data
+        });
     }
 
 });
 
 socket.on("slap", function(data){
+
     if(!isAnimationRunning){
-        isAnimationRunning = true;
-        showText(data.user, "slaps", data.slapped);
-        startSlap(data.outcome);
+        startSlap(data);
+    }else{
+        commandQueue.push({
+            type : "slap",
+            data : data
+        });
     }
 
 });
 
-socket.on("wide", function(){
+socket.on("wide", function(data){
 
     if(!isAnimationRunning){
-        isAnimationRunning = true;
-        // action_text.text(data.user + " slaps " + data.slapped);
-        startWide();
+        startWide(data);
+    }else{
+        commandQueue.push({
+            type : "wide",
+            data : data
+        });
     }
 
 });
@@ -94,10 +106,12 @@ $(document).ready(function(){
 function showText(first, command, second){
 
     action_first_name.css("color", first.color);
-    action_second_name.css("color", second.color);
     action_first_name.text(first.name);
     action_command.text(command);
-    action_second_name.text(second.name);
+    if(second){
+        action_second_name.css("color", second.color);
+        action_second_name.text(second.name);
+    }
 
 }
 
@@ -113,8 +127,10 @@ function hideText(){
 }
 
 // TODO ADD Execution Easter Egg for Askanri and everyone
-function startPat(){
+function startPat(data){
 
+    isAnimationRunning = true;
+    showText(data.user, "pats", data.patted);
     let sidonX = -490, sidonY = -470;
     let sidonDestinationX = -90;
     canvas.drawImage(images["kass-1"], 100, 100, 300, 300);
@@ -186,8 +202,10 @@ function patting(sidonX, sidonY){
 
 }
 
-function startSlap(outcome){
+function startSlap(data){
 
+    isAnimationRunning = true;
+    showText(data.user, "slaps", data.slapped);
     let handWidth = 64 * 3, handHeight = 49 * 3;
     let handX = canvas.canvas.width - handWidth, handY = 200 + 20 - (handHeight / 2);
     let handSprite = 1;
@@ -204,11 +222,11 @@ function startSlap(outcome){
             let luigi = { x : luigiX, y : luigiY, width : luigiWidth, height : luigiHeight};
             let hand = { x : handX, y : handY, width : handWidth, height : handHeight};
             setTimeout(function(){
-                if(outcome.value){
-                    action_first_name.attr("data-exp", "+" + outcome.exp + "xp");
+                if(data.outcome.value){
+                    action_first_name.attr("data-exp", "+" + data.outcome.exp + "xp");
                     approachForSlap(luigi, hand);
                 }else{
-                    action_second_name.attr("data-exp", "+" + outcome.exp + "xp");
+                    action_second_name.attr("data-exp", "+" + data.outcome.exp + "xp");
                     missing(luigi, hand);
                 }  
             }, delay);          
@@ -478,8 +496,10 @@ function luigiWins(luigi){
 
 }
 
-function startWide(){
+function startWide(data){
 
+    isAnimationRunning = true;
+    showText(data.user, " is a wider");
     canvas.canvas.width = 800;
     let wideWidth = 112 * 2, wideHeight = 79 * 2;
     let wideX = (canvas.canvas.width / 2) - (wideWidth / 2),
@@ -528,9 +548,23 @@ function endAnimation(drawTimer){
                 canvas.setTransform(1, 0, 0, 1, 0, 0);
                 canvas.canvas.width = 400;
                 isAnimationRunning = false;
+                checkQueue();
             }, 100);
         }
     }, 50);
+
+}
+
+function checkQueue(){
+
+    if(commandQueue.length < 1) return;
+
+    let nextCommand = commandQueue.splice(0, 1)[0];
+    switch(nextCommand.type){
+        case "pat": startPat(nextCommand.data); break;
+        case "slap": startSlap(nextCommand.data); break;
+        case "wide": startWide(nextCommand.data); break;
+    }
 
 }
 
