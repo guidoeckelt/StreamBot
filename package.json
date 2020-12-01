@@ -1,0 +1,21 @@
+{
+  "name": "thatcharakt0rz",
+  "version": "1.0.0",
+  "description": "twitch chatbot for showing overlays on stream on command",
+  "main": "server.js",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "twitch",
+    "chatbot"
+  ],
+  "author": "Charaktar",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1",
+    "socket.io": "^3.0.1",
+    "tmi.js": "^1.5.0",
+    "ws": "^7.4.0"
+  }
+}
