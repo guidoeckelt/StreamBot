@@ -1,0 +1,18 @@
+{
+    "pat" : { 
+        "cooldown" : 10,
+        "lastUSe" : 0
+    },
+    "slap" : { 
+        "cooldown" : 10,
+        "lastUSe" : 0
+    },
+    "wide" : { 
+        "cooldown" : 1,
+        "lastUSe" : 0
+    },
+    "dice" : { 
+        "cooldown" : 0,
+        "lastUSe" : 0
+    }
+}
