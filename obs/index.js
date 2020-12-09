@@ -125,6 +125,7 @@ function hideText(){
 }
 
 // TODO ADD Execution Easter Egg for Askanri and everyone
+// TODO improve animations and images
 function startPat(data){
 
     isAnimationRunning = true;
