@@ -1,18 +1,24 @@
 {
     "pat" : { 
-        "cooldown" : 10,
-        "lastUSe" : 0
+        "cooldown" : 0,
+        "lastUSe" : 0,
+        "rewardId" : "a004ad5f-8305-4be9-9668-d84b009b33ec"
     },
     "slap" : { 
-        "cooldown" : 10,
+        "cooldown" : 0,
+        "lastUSe" : 0,
+        "rewardId" : "ef7360e9-8644-4746-94a9-5a24f0057c8f"
+    },
+    "exp" : { 
+        "cooldown" : 2,
         "lastUSe" : 0
     },
     "wide" : { 
-        "cooldown" : 1,
+        "cooldown" : 10,
         "lastUSe" : 0
     },
     "dice" : { 
-        "cooldown" : 0,
+        "cooldown" : 2,
         "lastUSe" : 0
     }
 }

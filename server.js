@@ -8,15 +8,28 @@ let http = require("http").createServer(app);
 let io = require("socket.io")(http);
 
 let sqlite3 = require('sqlite3').verbose();
+let insertUserSql = "INSERT INTO User(twitch_id) "+
+                    "VALUES (?)";
+let insertSlapSql = "INSERT INTO Slap(user_id, victim, exp, outcome) "+
+                    "VALUES (?,?,?,?)";
+let getUserSql = "SELECT id, exp "+
+                "FROM USER "+
+                "WHERE twitch_id = ?";
+let getUserExpSql = "SELECT user.id, user.exp, COUNT(slap.id) AS 'slaps' "+
+                    "FROM USER user , Slap slap "+
+                    "WHERE user.twitch_id = ? "+
+                    "AND user.id = slap.user_id";
+let updateUserSql = "UPDATE User "+
+                    "SET exp = ? "+
+                    "WHERE id = ?";
+
 let commands = require("./commands.json");
 
-app.use('/public', express.static(path.join(__dirname, 'obs')))
+app.use('/public', express.static(path.join(__dirname, 'obs')));
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/obs/index.html');
 });
-let obs;
 io.on("connection", (socket) => {
-    obs = socket;
     console.log("a user connected");
 });
 
@@ -26,22 +39,13 @@ const opts = {
         username: env.bot_name,
         password: env.oauth_token
     },
-        channels: [
-            env.channel
-    ]
+    channels: env.channels
 };
 
 const client = new tmi.client(opts);
 client.on('message', onMessageHandler);
 client.on('connected', onConnectedHandler);
 client.connect();
-
-let db = new sqlite3.Database('./slap.db', sqlite3.OPEN_READWRITE, (err) => {
-    if (err) {
-        console.error(err.message);
-    }
-    console.log('Connected to the Slap database.');
-});
 
 http.listen(3000, () => {
     console.log('listening on *:3000');
@@ -54,28 +58,32 @@ function onMessageHandler (target, context, msg, self) {
     let message = msg.trim();
     let messageSplit = message.split(" ");
     let command = messageSplit[0];
-    if(command[0] !== "!"){
-        return;
-    }
-    let commandProperties = commands[command.substring(1)];
-    let currentTimestamp = Date.now();
-    let lastUseWithOffset = commandProperties.lastUse + (commandProperties.cooldown * 1000)
-    if(currentTimestamp < lastUseWithOffset){
-        console.log("command "+command+" is on cooldown");
-        return;
+    if(context["custom-reward-id"] === undefined){
+        if(command[0] !== "!") return; // normal message
+        if(isCommandOnCooldown(command)) return console.log("command "+command+" is on cooldown");
+        switch(command){
+            case "!exp" : expCommand(target, context); break;
+            case "!wide" : wideCommand(target, context); break;
+            case "!dice" : diceCommand(target, context); break;
+    
+            default: console.log("* Unknown command: " + message);
+        }
     }else{
-        commandProperties.lastUse = currentTimestamp;
-    }
-    switch(command){
-        
-        case "!pat" : patCommand(target, context, messageSplit[1]); break;
-        case "!slap" : slapCommand(target, context, messageSplit[1]); break;
-        case "!wide" : wideCommand(target, context); break;
-        case "!dice" : diceCommand(target, context); break;
+        let redeemedReward = context["custom-reward-id"];
+        Object.keys(commands).forEach((key) =>{
+            let commandProperty = commands[key];
+            // console.log(key);
+            // console.log(commandProperty.rewardId +" : " + redeemedReward);
+            if(commandProperty.rewardId === redeemedReward){
+                switch(key){
+                    case "pat" : patCommand(target, context, messageSplit[0]); break;
+                    case "slap" : slapCommand(target, context, messageSplit[0]); break;
 
-        default: console.log("* Unknown command: " + message);
+                    default: console.log("* Unknown points reward: " + message);
+                }
+            }
+        });
     }
-
     // test
     // console.log(target+"; "+msg);
     // console.log(context);
@@ -101,7 +109,6 @@ function patCommand(target, context, patted){
 }
 
 function slapCommand(target, context, slapped){
-    // TODO database
     let user = context["display-name"];
     if(slapped === undefined){
         client.say(target, user + " is a weirdo and slaps no one PepeLaugh");
@@ -115,19 +122,14 @@ function slapCommand(target, context, slapped){
         let outcome = { value : roll > 3, exp : exp};
         let first = { name : user , color : context.color};
         let second = { name : slapped, color : "#000"};
-        let twitchId = context["user-id"];
-        let userId = 0;
-        // need exp value here
-        if(isUserCreated(twitchId)){
-            userId = getUser(twitchId);
-        }else{
-            userId = createUser(twitchId);
-        }
-        createSlap(userId, slapped, outcome);
         io.emit("slap", { user : first, slapped : second, outcome : outcome });
+        LogNewSlapInDatabase(context["user-id"], slapped, outcome);
     }
     console.log("* Executed slap command");
+}
 
+function expCommand(target, context){
+    GetExpForUser(target, context["user-id"]);
 }
 
 function wideCommand(target, context){
@@ -135,6 +137,24 @@ function wideCommand(target, context){
     io.emit("wide", { user : user});
     client.say(target, "widepeepoHappy we wide widepeepoHappy we happy");
     console.log("* Executed wide command");
+}
+
+function diceCommand(target, context){
+    let num = getRandomInt(1, 6);
+    client.say(target, context["display-name"] + " rolled a " + num);
+    console.log("* Executed dice command");
+}
+
+function isCommandOnCooldown(command){
+    let commandProperties = commands[command.substring(1)];
+    let currentTimestamp = Date.now();
+    let lastUseWithOffset = commandProperties.lastUse + (commandProperties.cooldown * 1000)
+    if(currentTimestamp < lastUseWithOffset){
+        return true;
+    }else{
+        commandProperties.lastUse = currentTimestamp;
+        return false;
+    }
 }
 
 function isNameTheSame(first, second){
@@ -146,12 +166,6 @@ function isNameTheSame(first, second){
     return first.toLowerCase() === cleanSecond.toLowerCase();
 }
 
-function diceCommand(target, context){
-    let num = getRandomInt(1, 6);
-    client.say(target, context["display-name"] + " rolled a " + num);
-    console.log("* Executed dice command");
-}
-
 function calculateExperience(){
     return getRandomInt(1, 1000);
 }
@@ -161,65 +175,69 @@ function getRandomInt(min, max) {
 }
 
 // DB functions
-function isUserCreated(twitchId){
-    let sql = 
-    "SELECT *"+
-    "FROM USER"+
-    "WHERE twitch_id = ?";
-    db.get(sql, [twitchId], (err, row) => {
-        if (err) {
-            throw err;
-        }
-        return row !== undefined;
+function GetExpForUser(target, twitchId){
+    let db = new sqlite3.Database('./slap.db', sqlite3.OPEN_READWRITE, (err) => {
+        db.get(getUserExpSql, [twitchId], (err, dbUser) => {
+            if(err) return console.error(err);
+            if(dbUser === undefined){
+                client.say(target, "Sorry, no slap from you is registered");
+            }else{
+                client.say(target, "you have accumilated " + dbUser.exp + " exp with " + dbUser.slaps + " slaps");
+            }
+        })
+    });
+    db.close((err) => {
+        if(err) return console.error(err);
+        console.log("disconnected from database");
     });
 }
 
-function createUser(twitchId){
-    let sql = 
-    "INSERT INTO User(twitch_id)"+
-    "VALUES (?)";
-
-    db.run(sql, [twitchId], (err) =>{
-        if (err) {
-            throw err;
-        }
-        return this.lastId;
+function LogNewSlapInDatabase(twitchId, victim, outcome){
+    let db = new sqlite3.Database('./slap.db', sqlite3.OPEN_READWRITE, (err) => {
+        if (err) return console.error(err.message);
+        console.log('Connected to the Slap database.');
+        db.get(getUserSql, [twitchId], (err, dbUser) =>{
+            if(err) return console.error(err.message);
+            if(dbUser === undefined){
+                createUser(db, twitchId, victim, outcome);
+            }else{
+                console.log("got existing user");
+                createSlap(db, dbUser, victim, outcome);
+            }
+        });
     });
-
-}
-
-function getUser(twitchId){
-    let sql = 
-    "SELECT id"+
-    "FROM USER"+
-    "WHERE twitch_id = ?";
-    db.get(sql, [twitchId], (err, row) => {
-        if (err) {
-            throw err;
-        }
-        return row.id;
+    db.close((err) => {
+        if(err) return console.log(err.message);
+        console.log("disconnected from database");
     });
 }
 
-function createSlap(userId, victim, outcome){
-    let sql = 
-    "INSERT INTO Slap(user_id, victim, exp, outcome)"+
-    "VALUES (?,?,?,?)";
+function createUser(db, twitchId, victim, outcome){
+    db.run(insertUserSql, [twitchId], function(err){
+        if(err) return console.error(err.message);
+        let dbId = this.lastID;
+        console.log("created new user");
+        createSlap(db, {id: dbId, exp : 0}, victim, outcome);
+    });
+}
+
+function createSlap(db, dbUser, victim, outcome){
     let didHit = outcome.value ? 1 : 0;
-    db.run(sql, [userId, victim, outcome.exp, didHit], (err) =>{
-        if (err) {
-            throw err;
-        }
+    let newExp = outcome.value ? dbUser.exp + outcome.exp : dbUser.exp - outcome.exp;
+    db.run(insertSlapSql, [dbUser.id, victim, outcome.exp, didHit], (err) =>{
+        if(err) return console.error(err.message);
+        console.log("created new slap");
+        db.run(updateUserSql, [newExp, dbUser.id], (err) => {
+            if(err) return console.error(err.message);
+            console.log("sucessfully executed slap");
+        });
     });
-
-    // update exp for user
 }
 
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port) {
     console.log("* Connected to " + addr + ":" + port);
 }
-
 // #thatcharaktar; do something
 // { 'badge-info': { subscriber: '3' },
 //   badges: { broadcaster: '1', subscriber: '0', glitchcon2020: '1' },
@@ -245,3 +263,4 @@ function onConnectedHandler (addr, port) {
 
 // 'custom-reward-id'
 // pat = a004ad5f-8305-4be9-9668-d84b009b33ec
+// slap = ef7360e9-8644-4746-94a9-5a24f0057c8f

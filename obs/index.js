@@ -71,10 +71,8 @@ $(document).ready(function(){
     action_canvas.height = 400;
     canvas = action_canvas.getContext("2d");
 
-    // addImage("kass"); // scuffed
     addImage("kass-1");
     addImage("kass-2");
-    // addImage("sidon"); //scuffed
     addImage("sidon-1");
     addImage("hand-1");
     addImage("hand-2");
