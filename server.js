@@ -96,6 +96,8 @@ function onMessageHandler (target, context, msg, self) {
 // find out how to use bot commands (USERSTATE) https://dev.twitch.tv/docs/irc/commands
 // maybe there is a way to track peoples nickname to update exp
 // maybe death system with stat
+// slap history
+
 function patCommand(target, context, patted){
     let user = context["display-name"];
     if(patted === undefined){
